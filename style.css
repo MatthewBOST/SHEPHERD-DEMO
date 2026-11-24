@@ -1,0 +1,2805 @@
+:root {
+  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "IBM Plex Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+
+  /* Surfaces — opaque, structured panels rather than translucent "glass" cards. */
+  --surface-1: #12151B;
+  --surface-2: #0D0F14;
+  --surface-3: rgba(255, 255, 255, 0.05);
+  --surface-3-hover: rgba(255, 255, 255, 0.09);
+
+  --border: rgba(255, 255, 255, 0.10);
+  --border-strong: rgba(255, 255, 255, 0.18);
+
+  --text: #E7E9EC;
+  --text-dim: rgba(231, 233, 236, 0.62);
+  --text-faint: rgba(231, 233, 236, 0.42);
+
+  /* Brand accent — brass/gold, used sparingly for identity and key values. */
+  --accent: #B8922E;
+  --accent-dim: rgba(184, 146, 46, 0.16);
+
+  /* Secondary accent — desaturated signal blue, used for interactive/selection states. */
+  --interactive: #5B8DBE;
+  --interactive-dim: rgba(91, 141, 190, 0.16);
+
+  /* Status colors — muted, instrumentation-style rather than neon. */
+  --status-critical: #E5484D;
+  --status-warning: #E08A3C;
+  --status-caution: #D9B23C;
+  --status-nominal: #4CAF7D;
+
+  --radius: 5px;
+  --radius-sm: 3px;
+  --shadow-panel: 0 10px 28px rgba(0, 0, 0, 0.45);
+  --shadow-dock: 0 6px 18px rgba(0, 0, 0, 0.4);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body, #cesiumContainer {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #000;
+}
+
+body {
+  font-family: var(--font-sans);
+  color: var(--text);
+}
+
+/* Icônes SVG inline (boutons, en-têtes de section repliables) : trait fin,
+   taille cohérente, alignées avec le texte qui les accompagne. */
+.btnIcon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.summaryLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+/* ---------- Dock central (seul mode d'interface) ---------- */
+#dock {
+  display: flex;
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 200000;
+  align-items: center;
+  gap: 4px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: 5px;
+  box-shadow: var(--shadow-dock);
+  cursor: move;
+}
+
+.dockGroup {
+  display: flex;
+  gap: 4px;
+}
+
+.dockDivider {
+  width: 1px;
+  align-self: stretch;
+  margin: 3px 3px;
+  background: var(--border-strong);
+}
+
+/* Disposition verticale : quand le dock est lâché près du bord gauche/droit
+   de l'écran (voir updateDockOrientation), il se soude au bord et s'empile
+   en colonne plutôt que de rester une barre horizontale plaquée contre un
+   bord étroit. */
+#dock.dockVertical {
+  flex-direction: column;
+}
+
+#dock.dockVertical .dockGroup {
+  flex-direction: column;
+}
+
+#dock.dockVertical .dockDivider {
+  width: auto;
+  height: 1px;
+  align-self: stretch;
+  margin: 3px 3px;
+}
+
+.dockLayoutResetBtn {
+  color: var(--text-faint);
+}
+
+.dockBtn {
+  width: 34px;
+  height: 34px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim);
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+
+.dockBtn svg {
+  width: 17px;
+  height: 17px;
+  flex-shrink: 0;
+}
+
+/* Pastille d'état du fichier de session : vert = écrit en continu,
+   orange = lié mais en attente d'autorisation d'écriture. */
+.sessionFileBtn {
+  position: relative;
+}
+
+.sessionFileLinked::after,
+.sessionFilePending::after {
+  content: "";
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.sessionFileLinked::after {
+  background: var(--status-nominal);
+}
+
+.sessionFilePending::after {
+  background: var(--status-warning);
+}
+
+.dockBtn:hover {
+  background: var(--surface-3);
+  color: var(--text);
+}
+
+.dockBtn.dockBtnActive {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.dockBtn.dockBtnActive:hover {
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+/* Panneaux pilotés par le dock : masqués par défaut, affichés uniquement
+   quand leur bouton de dock est activé (classe dockOpen). */
+.dockManaged {
+  display: none;
+}
+
+.dockManaged.dockOpen {
+  display: block;
+}
+
+.dockCloseBtn {
+  background: transparent;
+  color: var(--text-faint);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  width: 22px;
+  height: 22px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+
+.dockCloseBtn:hover {
+  background: rgba(229, 72, 77, 0.14);
+  border-color: var(--status-critical);
+  color: var(--status-critical);
+}
+
+/* ---------- Marque du site + déclencheur "À propos / mentions légales" ---------- */
+/* z-index au-dessus du ruban (200000) : la marque du site reste visible en
+   surimpression dans son coin, que le ruban soit affiché ou non. */
+#siteBrand {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 200001;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.siteBrandLogo {
+  width: 22px;
+  height: 22px;
+  display: block;
+}
+
+.siteBrandMark {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 1.5px;
+  color: var(--text-dim);
+}
+
+#legalInfoBtn {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  color: var(--text-faint);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+
+#legalInfoBtn svg {
+  width: 12px;
+  height: 12px;
+}
+
+#legalInfoBtn:hover {
+  background: var(--surface-3);
+  color: var(--text);
+  border-color: var(--text-dim);
+}
+
+/* Mode démo (lien public) : lecture seule. */
+body.demoMode .demoHidden {
+  display: none !important;
+}
+
+/* Démo : outils visibles mais verrouillés (voir DEMO_OPEN_PANELS dans app.js). */
+body.demoMode .dockBtn.demoLocked {
+  opacity: 0.32;
+  cursor: not-allowed;
+}
+
+body.demoMode .dockBtn.demoLocked:hover {
+  background: transparent;
+  color: var(--text-dim);
+}
+
+/* Réglages affichés mais figés pour la démo (plage d'altitude). */
+body.demoMode .catalogAccordionBody.demoLocked {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+body.demoMode .catalogAccordionBody.demoLocked * {
+  cursor: not-allowed;
+}
+
+/* Démo : accès direct au suivi d'un satellite de chaque constellation. */
+#demoTrackBar {
+  position: absolute;
+  left: 50%;
+  bottom: 44px;
+  transform: translateX(-50%);
+  z-index: 200000;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  max-width: calc(100% - 32px);
+}
+
+.demoTrackBtn {
+  padding: 9px 16px;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-dock);
+  color: #0A0C10;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter 0.12s ease;
+}
+
+.demoTrackBtn:hover {
+  filter: brightness(1.12);
+}
+
+#demoLockTip {
+  display: none;
+  position: fixed;
+  z-index: 300000;
+  max-width: 240px;
+  padding: 7px 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-panel);
+  color: var(--text-dim);
+  font-size: 11.5px;
+  line-height: 1.45;
+  pointer-events: none;
+}
+
+.demoLockTipTitle {
+  color: var(--text);
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.demoLockTipNote {
+  margin-top: 5px;
+  color: var(--text-faint);
+  font-size: 10.5px;
+}
+
+/* ---------- Panneau "À propos / Mentions légales" ---------- */
+#legalPanel {
+  top: 46px;
+  left: 12px;
+  width: 420px;
+  min-width: 260px;
+}
+
+.legalSectionTitle {
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--accent);
+  margin: 12px 0 4px;
+}
+
+.legalSectionTitle:first-child {
+  margin-top: 0;
+}
+
+.legalText {
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--text-dim);
+}
+
+.legalText a {
+  color: var(--interactive);
+}
+
+.legalPlaceholder {
+  color: var(--status-warning);
+  font-style: italic;
+}
+
+/* ---------- Statut de la source de données manuelle (dans le panneau admin) ---------- */
+#dataStatus {
+  background: var(--surface-2);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  margin-bottom: 8px;
+}
+
+/* ---------- En-tête commun à tous les panneaux flottants ---------- */
+.distancePanelHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin: -10px -14px 9px;
+  padding: 8px 14px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border-strong);
+  border-radius: var(--radius) var(--radius) 0 0;
+  cursor: move;
+}
+
+/* Phrase d'utilité sous le titre de chaque panneau : démo uniquement. */
+.panelPurpose {
+  display: none;
+}
+
+body.demoMode .panelPurpose {
+  display: block;
+  margin: -3px 0 9px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #3DFF7A;
+}
+
+.distancePanelTitle {
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+/* Base commune à tous les panneaux flottants : surface opaque, coin net,
+   ombre plate sans halo coloré (pas de glassmorphism). */
+#distancePanel,
+#sidePanel,
+#trailPanel,
+#orbitalParamsPanel,
+#adminPanel,
+#adminAddPanel,
+#catalogPanel,
+#customVectorPanel,
+#legalPanel,
+#groundTrackPanel {
+  position: absolute;
+  z-index: 100000;
+  background: var(--surface-1);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-panel);
+  max-width: 90vw;
+  max-height: 80vh;
+  resize: both;
+  overflow: auto;
+}
+
+/* ---------- Panneau de distance ---------- */
+#distancePanel {
+  top: 190px;
+  right: 330px;
+  width: 280px;
+  min-width: 210px;
+}
+
+#distancePanel .catalogAccordion + .catalogAccordion {
+  margin-top: 6px;
+}
+
+#distancePanel .catalogAccordionBody #referenceSiteSelect,
+#distancePanel .catalogAccordionBody #distanceSearchInput {
+  margin-bottom: 0;
+}
+
+/* Curseur double : deux input range superposés, seules les poignées
+   captent la souris. */
+.altRangeSlider {
+  position: relative;
+  height: 22px;
+}
+
+.altRangeTrack {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 4px;
+  transform: translateY(-50%);
+  border-radius: 2px;
+  background: var(--border-strong);
+}
+
+.altRangeFill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 2px;
+  background: var(--interactive);
+}
+
+.altRangeSlider input[type="range"] {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 22px;
+  margin: 0;
+  background: transparent;
+  pointer-events: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.altRangeSlider input[type="range"]::-webkit-slider-runnable-track {
+  background: transparent;
+}
+
+.altRangeSlider input[type="range"]::-moz-range-track {
+  background: transparent;
+}
+
+.altRangeSlider input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  pointer-events: auto;
+  width: 14px;
+  height: 14px;
+  margin-top: 4px;
+  border-radius: 50%;
+  border: 2px solid var(--interactive);
+  background: var(--surface-1);
+  cursor: pointer;
+}
+
+.altRangeSlider input[type="range"]::-moz-range-thumb {
+  pointer-events: auto;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--interactive);
+  background: var(--surface-1);
+  cursor: pointer;
+}
+
+.altRangeInputs {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.altRangeInputs input {
+  width: 70px;
+  margin: 0 3px;
+  padding: 3px 5px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text);
+  background: var(--surface-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+}
+
+#altitudeFilterCount {
+  font-family: var(--font-mono);
+}
+
+#distanceList div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 2px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.distRow {
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  align-items: center;
+}
+
+.distRow:hover {
+  background: var(--surface-3);
+}
+
+.distRowSelected {
+  background: var(--interactive-dim);
+}
+
+.distRowName {
+  flex: 1;
+}
+
+.distRowToggle {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(91, 141, 190, 0.55);
+  background: var(--interactive-dim);
+  color: var(--interactive);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.distRowToggle:hover {
+  background: rgba(91, 141, 190, 0.3);
+}
+
+.distRowCamera {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  margin-left: 6px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--surface-3);
+  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.distRowCamera:hover {
+  background: var(--surface-3-hover);
+  color: var(--text);
+}
+
+.distRowCameraActive {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+.distRowCameraActive:hover {
+  background: var(--accent-dim);
+}
+
+.distNone {
+  opacity: 0.6;
+  font-style: italic;
+}
+
+.customSiteRow {
+  display: flex;
+  gap: 6px;
+}
+
+#customSiteInput {
+  flex: 1;
+  min-width: 0;
+  background: var(--surface-3);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 5px 7px;
+  font-size: 12px;
+  font-family: var(--font-sans);
+}
+
+#customSiteAddBtn {
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--interactive);
+  background: var(--interactive-dim);
+  color: var(--interactive);
+  cursor: pointer;
+}
+
+#customSiteAddBtn:hover {
+  background: rgba(91, 141, 190, 0.28);
+}
+
+#customSiteAddBtn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+#referenceSiteSelect {
+  width: 100%;
+  margin-bottom: 8px;
+  background: var(--surface-3);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 4px 6px;
+  font-size: 12px;
+  font-family: var(--font-sans);
+  cursor: pointer;
+}
+
+#distanceSearchInput {
+  width: 100%;
+  margin-bottom: 8px;
+  background: var(--surface-3);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 5px 7px;
+  font-size: 12px;
+  font-family: var(--font-sans);
+}
+
+/* Titres de section dans la liste de distances (Top 5 / Sélectionnés /
+   Résultats de recherche / Liste complète) : plus spécifique que la règle
+   générale "#distanceList div" pour ne pas hériter de son display:flex. */
+#distanceList .distSectionTitle {
+  display: block;
+  font-weight: 600;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-faint);
+  margin: 9px 0 3px;
+  padding: 0;
+  border-bottom: none;
+}
+
+#distanceList .distSectionTitle:first-child {
+  margin-top: 0;
+}
+
+#distShowAllToggle {
+  width: 100%;
+  margin-top: 8px;
+  background: var(--surface-3);
+  color: var(--interactive);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 5px 7px;
+  font-size: 11px;
+  font-family: var(--font-sans);
+  cursor: pointer;
+}
+
+#distShowAllToggle:hover {
+  background: var(--interactive-dim);
+}
+
+#referenceSiteSelect option {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.distRed,
+.distOrange,
+.distYellow,
+.distGreen {
+  font-family: var(--font-mono);
+}
+
+.distRed {
+  color: var(--status-critical);
+  font-weight: 600;
+}
+
+.distOrange {
+  color: var(--status-warning);
+  font-weight: 600;
+}
+
+.distYellow {
+  color: var(--status-caution);
+}
+
+.distGreen {
+  color: var(--status-nominal);
+}
+
+/* ---------- Panneau "Risques potentiels" ---------- */
+#sidePanel {
+  top: 8px;
+  right: 330px;
+  width: 300px;
+  min-width: 160px;
+  min-height: 90px;
+}
+
+#riskLogFooter {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+#riskLogCount {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-dim);
+}
+
+#exportRiskLogBtn {
+  background: var(--surface-3);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+#exportRiskLogBtn:hover {
+  background: var(--surface-3-hover);
+  border-color: var(--interactive);
+}
+
+/* Conjonctions (TCA, distance de passage, probabilité de collision) */
+#conjunctionBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.conjControls {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px;
+}
+
+#conjPrimarySelect,
+#conjHorizonSelect {
+  background: var(--surface-3);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 5px 7px;
+  font-size: 11.5px;
+  font-family: var(--font-sans);
+  min-width: 0;
+  cursor: pointer;
+}
+
+#conjRunBtn {
+  background: var(--surface-3);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+#conjRunBtn:hover {
+  background: var(--surface-3-hover);
+  border-color: var(--interactive);
+}
+
+#conjRunBtn:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+#conjStatus {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-dim);
+  line-height: 1.4;
+}
+
+#conjStatus:empty {
+  display: none;
+}
+
+#conjResults {
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.conjRow {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 1px 8px;
+  padding: 5px 4px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+
+.conjRow:hover {
+  background: var(--surface-3);
+}
+
+.conjNames {
+  font-size: 11.5px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.conjPc {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  text-align: right;
+}
+
+.conjMeta {
+  grid-column: 1 / -1;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-dim);
+}
+
+.riskPairRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.riskPairCheckbox {
+  flex-shrink: 0;
+  cursor: pointer;
+  accent-color: var(--interactive);
+}
+
+.riskPairNames {
+  flex: 1;
+}
+
+/* ---------- Panneau épaisseur des trajectoires ---------- */
+/* Étalé en largeur plutôt qu'empilé verticalement (les deux curseurs côte à
+   côte, la valeur sur la même ligne que son libellé, l'atmosphère en grille à
+   2 colonnes) pour que tout tienne sans avoir à faire défiler le panneau. */
+#trailPanel {
+  bottom: 12px;
+  right: 12px;
+  width: 340px;
+  min-width: 220px;
+  min-height: 70px;
+}
+
+.trailControlsGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 16px;
+  margin-bottom: 10px;
+}
+
+.trailControlCol {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.trailControlRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.trailControlLabel {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--text-faint);
+  margin-bottom: 3px;
+  margin-top: 10px;
+}
+
+.trailControlLabel:first-child {
+  margin-top: 0;
+}
+
+/* Dans une paire libellé/valeur sur une même ligne (voir .trailControlRow),
+   l'espacement vient du gap de la grille parente, pas d'une marge propre. */
+.trailControlRow .trailControlLabel {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+#trailWidthSlider,
+#trailRevolutionsSlider {
+  width: 100%;
+  accent-color: var(--interactive);
+}
+
+.trailControlValue {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--interactive);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Grille à 2 colonnes uniquement pour la liste des couches d'atmosphère
+   (scopé au conteneur, pas à .atmoLayerRow lui-même — cette classe est
+   partagée avec les filtres pays/type du catalogue, qui restent en liste
+   verticale simple). */
+#atmosphereLayersList {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 10px;
+}
+
+#atmosphereLayersList + .atmoLayerRow {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.atmoLayerRow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 0;
+  cursor: pointer;
+}
+
+.atmoLayerCheckbox {
+  flex-shrink: 0;
+  cursor: pointer;
+  accent-color: var(--interactive);
+}
+
+.atmoLayerSwatch {
+  flex-shrink: 0;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+}
+
+.atmoLayerName {
+  flex: 1;
+}
+
+.atmoLayerAlt {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--text-faint);
+}
+
+/* ---------- Paramètres orbitaux ---------- */
+/* Centré horizontalement sous le dock (comme le dock lui-même), plutôt qu'à
+   une position gauche fixe — même technique de centrage (left:50% +
+   transform) tant qu'il n'a jamais été déplacé à la main. */
+/* Bord gauche : en mode suivi, le catalogue (même emplacement) est fermé. */
+#orbitalParamsPanel {
+  top: 110px;
+  left: 12px;
+  width: 360px;
+  min-width: 220px;
+  min-height: 60px;
+}
+
+.orbitalParamsBlock {
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.orbitalParamsBlock:last-child {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.orbitalParamsName {
+  font-weight: 600;
+  font-size: 13px;
+  margin-bottom: 6px;
+  color: var(--accent);
+}
+
+.orbitalParamsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 3px 20px;
+}
+
+.orbitalParamsRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.orbitalParamsLabel {
+  color: var(--text-dim);
+}
+
+.orbitalParamsValue {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.orbitalParamsNameRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.orbitalParamsNameRow .orbitalParamsName {
+  margin-bottom: 0;
+}
+
+.focusExitBtn,
+.tleCopyBtn {
+  padding: 3px 8px;
+  font: inherit;
+  font-size: 11px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--surface-3);
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.focusExitBtn:hover,
+.tleCopyBtn:hover {
+  background: var(--surface-3-hover);
+  color: var(--text);
+}
+
+.focusExitBtn {
+  border-color: var(--status-warning);
+  background: rgba(224, 138, 60, 0.16);
+  color: var(--status-warning);
+  font-weight: 600;
+}
+
+.focusExitBtn:hover {
+  background: rgba(224, 138, 60, 0.28);
+  color: var(--status-warning);
+}
+
+/* "Quitter le suivi" + "Isoler" soudés en un seul bloc. */
+.focusBtnGroup {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.focusBtnGroup .focusExitBtn {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.focusIsolateBtn {
+  padding: 3px 8px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  margin-left: -1px;
+  border: 1px solid var(--interactive);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--interactive-dim);
+  color: var(--interactive);
+  cursor: pointer;
+}
+
+.focusIsolateBtn:hover {
+  background: rgba(91, 141, 190, 0.28);
+}
+
+.focusIsolateBtnActive,
+.focusIsolateBtnActive:hover {
+  background: var(--interactive);
+  color: var(--surface-1);
+}
+
+#catalogHideSatellitesBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--status-warning);
+  background: rgba(224, 138, 60, 0.16);
+  color: var(--status-warning);
+  cursor: pointer;
+}
+
+#catalogHideSatellitesBtn:hover {
+  background: rgba(224, 138, 60, 0.28);
+}
+
+#catalogHideSatellitesBtn.catalogHideSatellitesActive {
+  background: var(--status-warning);
+  color: var(--surface-1);
+}
+
+.tleSection {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.tleSectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.tleSectionHeader .trailControlLabel {
+  margin-top: 0;
+}
+
+.tleLines {
+  margin-bottom: 6px;
+  padding: 6px 8px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.5;
+  white-space: pre;
+  overflow-x: auto;
+  user-select: all;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.tleAgeFresh { color: var(--status-nominal); }
+.tleAgeAging { color: var(--status-caution); }
+.tleAgeStale { color: var(--status-critical); }
+
+/* ---------- Gestion des satellites (admin) ---------- */
+/* 2e colonne, juste à droite du catalogue (voir #catalogPanel plus bas, passé
+   en 1re colonne) — les deux ont échangé leur place par défaut. */
+#adminPanel {
+  top: 110px;
+  left: 370px;
+  width: 290px;
+  min-width: 220px;
+  min-height: 90px;
+}
+
+/* Formulaire d'ajout séparé dans son propre panneau (plus de place que quand
+   il partageait #adminPanel avec la liste) — 3e colonne, à droite de la
+   gestion des satellites. */
+#adminAddPanel {
+  top: 110px;
+  left: 680px;
+  width: 320px;
+  min-width: 240px;
+  min-height: 90px;
+}
+
+#adminTable {
+  max-height: 180px;
+  overflow-y: auto;
+  margin-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+}
+
+.adminRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.adminRowName {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.adminRowType {
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  flex-shrink: 0;
+}
+
+.adminRemoveBtn {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(229, 72, 77, 0.4);
+  background: rgba(229, 72, 77, 0.10);
+  color: var(--status-critical);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.adminRemoveBtn:hover {
+  background: rgba(229, 72, 77, 0.22);
+}
+
+#adminAddForm {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+#adminAddForm input,
+#adminAddForm select {
+  background: var(--surface-3);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 5px 7px;
+  font-size: 11.5px;
+  font-family: var(--font-sans);
+  width: 100%;
+}
+
+#adminTleLine1,
+#adminTleLine2 {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+}
+
+.adminAddFields {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+#adminAddBtn {
+  background: var(--surface-3);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+#adminAddBtn:hover {
+  background: var(--interactive-dim);
+  border-color: var(--interactive);
+}
+
+#adminError {
+  color: var(--status-critical);
+  font-size: 11px;
+  min-height: 14px;
+}
+
+#adminSheetLink {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  color: var(--status-nominal);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  text-decoration: none;
+}
+
+#adminSheetLink:hover {
+  text-decoration: underline;
+}
+
+/* ---------- Panneau Catalogue CelesTrak ---------- */
+/* 1re colonne (tout à gauche) — a échangé sa place par défaut avec
+   #adminPanel, qui passe en 2e colonne. */
+#catalogPanel {
+  top: 110px;
+  left: 12px;
+  width: 340px;
+  min-width: 230px;
+}
+
+#catalogPanelContent {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+#catalogSearch,
+#catalogColorBySelect,
+#trailStyleSelect {
+  background: var(--surface-3);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 5px 7px;
+  font-size: 11.5px;
+  font-family: var(--font-sans);
+  width: 100%;
+}
+
+#catalogColorBySelect,
+#trailStyleSelect {
+  cursor: pointer;
+}
+
+#catalogColorBySelect option,
+#trailStyleSelect option {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.catalogLegendRow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 2px 0;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.catalogLegendSwatch {
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+}
+
+/* ---------- Onglets déployables "Charger TLE déjà existants" / "Charger de
+   nouveaux TLE et mise à jour" ---------- */
+.catalogAccordion {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-3);
+}
+
+.catalogAccordion > summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 11.5px;
+  padding: 7px 10px;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--interactive);
+}
+
+.catalogAccordion > summary::-webkit-details-marker {
+  display: none;
+}
+
+.catalogAccordion > summary::after {
+  content: "▸";
+  flex-shrink: 0;
+  margin-left: 8px;
+  opacity: 0.8;
+  transition: transform 0.15s ease;
+}
+
+.catalogAccordion[open] > summary::after {
+  transform: rotate(90deg);
+}
+
+.catalogAccordionBody {
+  padding: 0 10px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.catalogAccordionHint {
+  font-size: 10.5px;
+  color: var(--text-faint);
+  line-height: 1.4;
+}
+
+#catalogRefreshExistingBtn {
+  align-self: flex-start;
+  background: var(--surface-3);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 3px 8px;
+  font-size: 10.5px;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: background 0.12s ease;
+}
+
+#catalogRefreshExistingBtn:hover {
+  background: var(--surface-3-hover);
+}
+
+#catalogRefreshExistingBtn:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+#catalogImportGroupsList,
+#catalogUpdateGroupsList,
+#catalogExistingSummaryList {
+  max-height: 220px;
+  overflow-y: auto;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 4px 0;
+}
+
+/* Catégories repliées par défaut (<details>), pour ne pas prendre toute la
+   place du panneau — un clic sur le titre déploie/replie. */
+.catalogCategorySection {
+  margin-bottom: 4px;
+}
+
+.catalogCategoryTitle {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 11px;
+  color: var(--accent);
+  margin: 6px 0 2px;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.catalogCategoryTitle::-webkit-details-marker {
+  display: none;
+}
+
+.catalogCategoryTitle::after {
+  content: "▸";
+  flex-shrink: 0;
+  opacity: 0.7;
+  transition: transform 0.15s ease;
+}
+
+.catalogCategorySection[open] > .catalogCategoryTitle::after {
+  transform: rotate(90deg);
+}
+
+.catalogGroupRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+  cursor: pointer;
+}
+
+.catalogImportGroupCheckbox,
+.catalogUpdateGroupCheckbox {
+  flex-shrink: 0;
+  cursor: pointer;
+  accent-color: var(--interactive);
+}
+
+.catalogGroupName {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.catalogGroupStatus {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--text-faint);
+  text-align: right;
+}
+
+.catalogGroupRemoveBtn {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(229, 72, 77, 0.4);
+  background: rgba(229, 72, 77, 0.10);
+  color: var(--status-critical);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.catalogGroupRemoveBtn:hover {
+  background: rgba(229, 72, 77, 0.22);
+}
+
+#catalogImportBtn,
+#spacetrackImportBtn,
+#catalogLoadAllExistingBtn,
+#catalogUpdateAllBtn,
+#catalogUpdateSelectedBtn,
+#catalogLoadSatcatBtn {
+  background: var(--surface-3);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+#catalogImportBtn:hover,
+#spacetrackImportBtn:hover,
+#catalogLoadAllExistingBtn:hover,
+#catalogUpdateAllBtn:hover,
+#catalogUpdateSelectedBtn:hover,
+#catalogLoadSatcatBtn:hover {
+  background: var(--interactive-dim);
+  border-color: var(--interactive);
+}
+
+#catalogImportBtn:disabled,
+#spacetrackImportBtn:disabled,
+#catalogLoadAllExistingBtn:disabled,
+#catalogUpdateAllBtn:disabled,
+#catalogUpdateSelectedBtn:disabled,
+#catalogLoadSatcatBtn:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+#catalogLoadExistingStatus,
+#catalogImportStatus,
+#spacetrackImportStatus,
+#catalogUpdateStatus,
+#catalogCounter {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-dim);
+}
+
+#catalogCountryFilter,
+#catalogTypeFilter {
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+/* ---------- Panneau "Vecteur personnalisé" ---------- */
+/* Ancré en haut (plus en bas) : rester ancré en bas poussait le panneau vers
+   le haut de l'écran au fur et à mesure que son contenu grandissait, jusqu'à
+   sortir par le haut de la fenêtre — ancré en haut, il grandit vers le bas et
+   le défilement interne (overflow:auto commun aux panneaux) prend le relais. */
+#customVectorPanel {
+  top: 8px;
+  right: 12px;
+  width: 290px;
+  min-width: 220px;
+}
+
+#customVectorPanelContent {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.customVectorTargetDisplay {
+  background: var(--surface-3);
+  color: var(--interactive);
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 11px;
+  padding: 5px 7px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+}
+
+#customVectorDirection,
+#customVectorLength,
+#customVectorColor,
+#customVectorWidth,
+#customVectorAltitude {
+  width: 100%;
+  background: var(--surface-3);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 5px 7px;
+  font-size: 11.5px;
+  font-family: var(--font-sans);
+}
+
+#customVectorLength,
+#customVectorWidth,
+#customVectorAltitude {
+  font-family: var(--font-mono);
+}
+
+#customVectorDirection,
+#customVectorColor {
+  cursor: pointer;
+}
+
+#customVectorDirection option {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+#customVectorColor {
+  padding: 2px 3px;
+  height: 28px;
+}
+
+#customVectorApplyBtn {
+  background: var(--surface-3);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+#customVectorApplyBtn:hover {
+  background: var(--interactive-dim);
+  border-color: var(--interactive);
+}
+
+#customVectorRemoveBtn {
+  background: rgba(229, 72, 77, 0.10);
+  color: var(--status-critical);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 10px;
+  border: 1px solid rgba(229, 72, 77, 0.35);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  transition: background 0.12s ease;
+}
+
+#customVectorRemoveBtn:hover {
+  background: rgba(229, 72, 77, 0.22);
+}
+
+#customVectorStatus {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-dim);
+}
+
+/* ---------- Widgets natifs Cesium (horloge + frise temporelle) ----------
+   Recolorés en CSS pour s'aligner sur la palette du dock — le comportement
+   (lecture, molette de vitesse, glisser sur la frise) reste celui de Cesium. */
+.cesium-viewer-animationContainer,
+.cesium-viewer-timelineContainer {
+  background: var(--surface-2) !important;
+  border: 1px solid var(--border-strong) !important;
+  border-radius: var(--radius) !important;
+  box-shadow: var(--shadow-dock) !important;
+}
+
+.cesium-animation-svgText,
+.cesium-timeline-ticLabel {
+  font-family: var(--font-mono) !important;
+}
+
+/* ---------- Bulle de détails au survol (liste "Charger données existantes") ----------
+   Élément unique, positionné en fixed hors de tout conteneur à scroll pour ne
+   jamais se faire couper, repositionné en JS près du curseur (bindGroupTooltip). */
+#catalogGroupTooltip {
+  display: none;
+  position: fixed;
+  z-index: 300000;
+  max-width: 200px;
+  padding: 5px 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-panel);
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.4;
+  pointer-events: none;
+}
+
+/* ---------- Aperçu d'aimantation "position d'origine" ----------
+   Cadre affiché pendant le glisser-déposer d'un panneau quand on s'approche
+   de sa position/taille par défaut, pour montrer où il va s'aimanter avant
+   de lâcher — voir panelHomeRects / makePanelDraggable dans app.js. */
+#panelSnapPreview {
+  display: none;
+  position: fixed;
+  z-index: 250000;
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.06);
+  pointer-events: none;
+  animation: panelSnapPreviewBlink 0.9s ease-in-out infinite;
+}
+
+@keyframes panelSnapPreviewBlink {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+
+/* ---------- Bulle au survol d'un objet en orbite (nom + vitesse) ----------
+   Même principe que #catalogGroupTooltip (élément fixe unique, repositionné
+   en JS au survol) — voir le picking Cesium dans app.js. */
+/* Compteur d'objets affichés, en bas à droite au-dessus de la timeline. */
+#viewStatusBar {
+  position: absolute;
+  right: 12px;
+  bottom: 38px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#visibleObjectCounter {
+  padding: 4px 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  pointer-events: none;
+}
+
+#visibleObjectCounter:empty {
+  display: none;
+}
+
+#resetViewBtn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+#resetViewBtn:hover {
+  background: var(--surface-3-hover);
+  border-color: var(--interactive);
+}
+
+#resetViewBtn .btnIcon {
+  width: 13px;
+  height: 13px;
+}
+
+#visibleObjectCounter strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* Distance objet suivi <-> station, posée au milieu du trait rouge. */
+#trackDistanceLabel {
+  display: none;
+  position: fixed;
+  z-index: 10;
+  transform: translate(-50%, -50%);
+  padding: 2px 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--status-critical);
+  background: rgba(5, 7, 10, 0.75);
+  border: 1px solid rgba(229, 72, 77, 0.6);
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+#objectHoverTooltip {
+  display: none;
+  position: fixed;
+  z-index: 300000;
+  padding: 6px 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-panel);
+  pointer-events: none;
+}
+
+.objectHoverName {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 11.5px;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.objectHoverSpeed {
+  margin-top: 2px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--interactive);
+}
+
+/* ---------- Réduire / agrandir les panneaux ---------- */
+.panelHeaderControls {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+/* Poignée de déplacement : grande zone tactile, glissement géré en JS. */
+.distancePanelHeader,
+#dock {
+  touch-action: none;
+}
+
+.panelGrip {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--accent-dim);
+  color: var(--accent);
+  cursor: grab;
+  touch-action: none;
+}
+
+.panelDragging .panelGrip {
+  cursor: grabbing;
+  background: var(--accent);
+  color: var(--surface-2);
+}
+
+@media (pointer: coarse) {
+  .panelGrip,
+  .panelHeaderControls .dockCloseBtn {
+    width: 32px;
+    height: 32px;
+  }
+}
+
+.panelControlBtn:hover {
+  background: var(--surface-3);
+  border-color: var(--text-dim);
+  color: var(--text);
+}
+
+.dockManaged.panelMinimized {
+  resize: none;
+  overflow: hidden;
+  padding-bottom: 0;
+}
+
+.dockManaged.panelMinimized > :not(.distancePanelHeader) {
+  display: none !important;
+}
+
+.dockManaged.panelMinimized > .distancePanelHeader {
+  margin-bottom: 0;
+  border-bottom: none;
+  border-radius: var(--radius);
+}
+
+.dockManaged.panelMaximized {
+  max-width: none;
+  max-height: none;
+}
+
+/* ---------- Recherche d'un objet à suivre (catalogue) ---------- */
+#catalogSearchBox {
+  position: relative;
+}
+
+#catalogSearchResults {
+  display: none;
+  margin-top: 4px;
+  max-height: 260px;
+  overflow-y: auto;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+}
+
+.catalogSearchResult {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 8px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font: inherit;
+  font-size: 11.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.catalogSearchResult:last-child {
+  border-bottom: none;
+}
+
+.catalogSearchResult:hover {
+  background: var(--surface-3);
+}
+
+.catalogSearchResultTracked .catalogSearchResultName {
+  color: var(--accent);
+}
+
+.catalogSearchResultName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.catalogSearchResultMeta {
+  flex-shrink: 0;
+  font-size: 10.5px;
+  color: var(--text-faint);
+}
+
+.catalogSearchEmpty {
+  padding: 6px 8px;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.catalogSearchOnlineTitle {
+  padding: 4px 8px 2px;
+  border-top: 1px solid var(--border-strong);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.catalogSearchOnlineBtn .catalogSearchResultName {
+  color: var(--accent);
+}
+
+#catalogSearchStatus {
+  display: none;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+/* ---------- Bulles d'aide "i" ---------- */
+.infoRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.infoTip {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  margin-left: 6px;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-style: italic;
+  font-weight: 700;
+  line-height: 14px;
+  text-align: center;
+  cursor: pointer;
+}
+
+.infoRow .infoTip {
+  margin-left: 0;
+}
+
+.infoTip:hover,
+.infoTip.infoTipOpen {
+  color: var(--text);
+  border-color: var(--interactive);
+}
+
+.infoTip:focus-visible {
+  outline: 2px solid var(--interactive);
+  outline-offset: 1px;
+}
+
+.catalogAccordion > summary .infoTip {
+  margin-left: auto;
+  margin-right: 6px;
+}
+
+#infoTipBubble {
+  position: fixed;
+  z-index: 2000000;
+  max-width: 280px;
+  padding: 8px 10px;
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  font-size: 11.5px;
+  line-height: 1.45;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+}
+
+/* ---------- Conjonction affichée ---------- */
+.conjRowActive {
+  background: var(--surface-3);
+  box-shadow: inset 2px 0 0 var(--interactive);
+}
+
+.conjDot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-right: 4px;
+  vertical-align: 1px;
+}
+
+.conjDotPrimary { background: #4FC3F7; }
+.conjDotSecondary { background: #FF9F43; }
+
+/* "i" dans l'en-tête d'un panneau : collé au titre, la croix reste à droite. */
+.distancePanelHeader .infoTip {
+  margin-left: -4px;
+  margin-right: auto;
+}
+
+#altitudeFilterCount:empty { display: none; }
+
+/* ---------- Paramètres orbitaux en mode conjonction ---------- */
+.conjCountdown {
+  margin: 2px 0 8px;
+  padding: 6px 8px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: #4FC3F7;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.conjRoleLabel {
+  margin-right: 6px;
+  color: var(--text-dim);
+  font-weight: 500;
+}
+
+/* ---------- Démo : disposition et invites ---------- */
+/* Distances à gauche, collisions à droite : jamais l'un sur l'autre. */
+body.demoMode #distancePanel {
+  top: 64px;
+  left: 12px;
+  right: auto;
+  width: 300px;
+}
+
+body.demoMode #sidePanel {
+  top: 64px;
+  right: 12px;
+  left: auto;
+  width: 340px;
+}
+
+/* Invites (flèche + texte), ajoutées par app.js en démo, masquées une fois l'action faite. */
+body.demoMode .ctaHint:not([hidden]) {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 6px 0;
+  padding: 7px 9px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--text);
+  background: rgba(79, 195, 247, 0.10);
+  border: 1px solid rgba(79, 195, 247, 0.55);
+  border-radius: var(--radius-sm);
+}
+
+body.demoMode .ctaHint strong {
+  color: #4FC3F7;
+}
+
+body.demoMode .ctaArrow {
+  flex-shrink: 0;
+  color: #4FC3F7;
+  font-size: 15px;
+  line-height: 1;
+  transform: rotate(90deg);
+  animation: ctaArrowBounce 0.9s ease-in-out infinite;
+}
+
+@keyframes ctaArrowBounce {
+  0%, 100% { transform: rotate(90deg) translateX(0); }
+  50% { transform: rotate(90deg) translateX(4px); }
+}
+
+body.demoMode #distancePanel.ctaDone #customSiteCta,
+body.demoMode #sidePanel.ctaDone #conjRunCta {
+  display: none;
+}
+
+body.demoMode #distanceMeasureDetails > summary {
+  color: #4FC3F7;
+  font-size: 12.5px;
+}
+
+/* Champ de site et bouton d'analyse : halo bleu qui pulse. */
+body.demoMode #distancePanel:not(.ctaDone) #customSiteInput,
+body.demoMode #sidePanel:not(.ctaDone) #conjRunBtn {
+  border-color: #4FC3F7;
+  animation: ctaPulse 1.4s ease-in-out infinite;
+}
+
+body.demoMode #sidePanel:not(.ctaDone) #conjRunBtn {
+  background: rgba(79, 195, 247, 0.16);
+  color: #fff;
+}
+
+@keyframes ctaPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(79, 195, 247, 0.0); }
+  50% { box-shadow: 0 0 0 3px rgba(79, 195, 247, 0.55); }
+}
+
+/* Première situation trouvée : cadre bleu clignotant jusqu'au premier clic. */
+body.demoMode .conjRow.conjRowCta {
+  position: relative;
+  border: 2px solid #4FC3F7;
+  border-radius: var(--radius-sm);
+  padding-bottom: 22px;
+  animation: conjRowBlink 1s ease-in-out infinite;
+}
+
+body.demoMode .conjRow.conjRowCta::after {
+  content: "👆 Clic";
+  position: absolute;
+  right: 6px;
+  bottom: 4px;
+  padding: 1px 6px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #0A0C10;
+  background: #4FC3F7;
+  border-radius: var(--radius-sm);
+}
+
+@keyframes conjRowBlink {
+  0%, 100% { border-color: #4FC3F7; box-shadow: 0 0 10px rgba(79, 195, 247, 0.6); }
+  50% { border-color: rgba(79, 195, 247, 0.2); box-shadow: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.demoMode .ctaArrow,
+  body.demoMode #customSiteInput,
+  body.demoMode #conjRunBtn,
+  body.demoMode .conjRow.conjRowCta {
+    animation: none;
+  }
+}
+
+/* Bouton "Vue Terre" en forme de globe, halo d'atmosphère bleu/violet,
+   continents qui défilent lentement, badge œil en bas à droite. */
+#resetViewBtn {
+  position: relative;
+  width: 54px;
+  height: 54px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow:
+    0 0 0 2px rgba(79, 195, 247, 0.55),
+    0 0 16px rgba(79, 195, 247, 0.6),
+    0 0 34px rgba(124, 108, 255, 0.3);
+  animation: earthBtnBreath 3.2s ease-in-out infinite;
+  transition: transform 0.18s ease;
+}
+
+#resetViewBtn:hover {
+  background: transparent;
+  transform: scale(1.08);
+  animation: none;
+  box-shadow:
+    0 0 0 2px rgba(79, 195, 247, 0.9),
+    0 0 22px rgba(79, 195, 247, 0.85),
+    0 0 44px rgba(124, 108, 255, 0.5);
+}
+
+#resetViewBtn:active {
+  transform: scale(0.96);
+}
+
+.earthBtnGlobe {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.earthBtnLandScroll {
+  animation: earthBtnSpin 24s linear infinite;
+}
+
+#resetViewBtn:hover .earthBtnLandScroll {
+  animation-duration: 6s;
+}
+
+.earthBtnEye {
+  position: absolute;
+  right: -5px;
+  bottom: -5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  color: #4FC3F7;
+  background: #0D0F14;
+  border: 1.5px solid #4FC3F7;
+  box-shadow: 0 0 8px rgba(79, 195, 247, 0.7);
+}
+
+.earthBtnEye svg {
+  width: 13px;
+  height: 13px;
+}
+
+@keyframes earthBtnSpin {
+  from { transform: translateX(0); }
+  to { transform: translateX(42px); }
+}
+
+@keyframes earthBtnBreath {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(79, 195, 247, 0.5), 0 0 12px rgba(79, 195, 247, 0.5), 0 0 26px rgba(124, 108, 255, 0.22); }
+  50% { box-shadow: 0 0 0 2px rgba(79, 195, 247, 0.75), 0 0 20px rgba(79, 195, 247, 0.75), 0 0 40px rgba(124, 108, 255, 0.38); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #resetViewBtn,
+  .earthBtnLandScroll { animation: none; }
+}
+
+/* ---------- Trace au sol ---------- */
+#groundTrackPanel {
+  top: 110px;
+  left: 390px;
+  width: 760px;
+  min-width: 380px;
+}
+
+#groundTrackPanel.dockOpen {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+#groundTrackPanel.panelMinimized {
+  gap: 0;
+}
+
+.groundTrackObject {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.groundTrackToolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  padding: 7px 9px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.gtColor {
+  display: flex;
+  cursor: pointer;
+}
+
+.gtColor input[type="color"] {
+  width: 26px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: none;
+  cursor: pointer;
+}
+
+.gtSlider {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.gtSlider input[type="range"] {
+  width: 90px;
+}
+
+.gtSliderValue {
+  min-width: 46px;
+  font-family: var(--font-mono);
+  color: var(--text);
+}
+
+.gtToggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+.gtToggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+#groundTrackMapWrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 0;
+}
+
+#groundTrackPanel.gtFixedHeight #groundTrackMapWrap {
+  flex: 1 1 0;
+}
+
+#groundTrackCanvas {
+  display: block;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: #0B1E33;
+}
+
+.groundTrackClock {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.gtClockButtons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.gtClockBtn,
+.gtExportBtn {
+  padding: 4px 9px;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--surface-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.gtClockBtn:hover,
+.gtExportBtn:hover {
+  background: var(--surface-3-hover);
+  border-color: var(--interactive);
+}
+
+.gtPlayBtn {
+  min-width: 34px;
+  color: #4FC3F7;
+  border-color: rgba(79, 195, 247, 0.6);
+}
+
+.gtPlayBtn.gtPlayBtnPaused {
+  color: var(--status-warning);
+  border-color: var(--status-warning);
+}
+
+#gtSpeedSelect {
+  padding: 4px 6px;
+  font-size: 11px;
+  font-family: var(--font-sans);
+  color: var(--text);
+  background: var(--surface-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+#gtScrubInput {
+  width: 100%;
+}
+
+.gtClockReadout {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text);
+}
+
+.gtClockOffset {
+  color: var(--text-dim);
+}
+
+.groundTrackExport {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.gtExportLabel {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-right: 2px;
+}
+
+.gtExportStatus {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+/* Boutons à droite du nom dans Paramètres orbitaux */
+.orbitalParamsActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.groundTrackBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  color: #4FC3F7;
+  background: rgba(79, 195, 247, 0.1);
+  border: 1px solid rgba(79, 195, 247, 0.55);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.groundTrackBtn:hover {
+  background: rgba(79, 195, 247, 0.2);
+}
+
+.groundTrackBtn .btnIcon {
+  width: 13px;
+  height: 13px;
+}
+
+#groundTrackMapWrap {
+  position: relative;
+}
+
+#groundTrackCanvas {
+  cursor: grab;
+  touch-action: none;
+}
+
+#groundTrackCanvas.gtDragging {
+  cursor: grabbing;
+}
+
+#groundTrackTooltip {
+  display: none;
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+  padding: 6px 9px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text);
+  background: rgba(13, 15, 20, 0.94);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+
+#groundTrackTooltip .gtTipDate {
+  margin-bottom: 2px;
+  font-weight: 600;
+  color: #FFFFFF;
+}
+
+#groundTrackTooltip .gtTipLabel {
+  display: inline-block;
+  width: 30px;
+  color: var(--text-dim);
+}
+
+.gtZoomBar {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px;
+  background: rgba(13, 15, 20, 0.85);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+}
+
+.gtZoomBar button {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--text);
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.gtZoomBar button:hover {
+  background: var(--surface-3-hover);
+  border-color: var(--interactive);
+}
+
+.gtZoomLabel {
+  min-width: 34px;
+  padding: 0 3px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-align: center;
+  color: var(--text-dim);
+}
+
+.focusBtnGroup .conjGroundTrackBtn {
+  margin-right: 6px;
+}
+
+#groundTrackTooltip .gtTipName {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 2px;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  color: #FFFFFF;
+}
+
+#groundTrackTooltip .gtTipDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+#gtColorInput:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.orbitalParamsNameRow {
+  flex-wrap: wrap;
+  row-gap: 6px;
+}
+
+#gtMapStyleSelect {
+  padding: 4px 6px;
+  font-size: 11px;
+  font-family: var(--font-sans);
+  color: var(--text);
+  background: var(--surface-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+#groundTrackCanvas {
+  background: #05070B;
+}
+
+.gtZoomBar .gtFullscreenBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.gtZoomBar .gtFullscreenBtn svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Plein écran : la carte prend toute la place libre. */
+#groundTrackPanel.gtFullscreen {
+  padding: 12px 16px;
+  border: none;
+  border-radius: 0;
+  resize: none;
+  overflow: hidden;
+  background: #0A0C10;
+}
+
+#groundTrackPanel.gtFullscreen #groundTrackMapWrap {
+  flex: 1 1 0;
+}
+
+#groundTrackPanel.gtFullscreen .panelHeaderControls .panelMinimizeBtn,
+#groundTrackPanel.gtFullscreen .panelHeaderControls .panelExpandBtn,
+#groundTrackPanel.gtFullscreen .panelHeaderControls .panelGrip {
+  display: none;
+}
+
+#groundTrackPanel::backdrop {
+  background: #0A0C10;
+}
+
+/* Démo : paramètres orbitaux entre Distances (gauche) et Collisions (droite). */
+body.demoMode #orbitalParamsPanel {
+  top: 64px;
+  left: 324px;
+  width: 340px;
+}
